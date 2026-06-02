@@ -1,0 +1,278 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── 用户 ───────────────────────────────────────────
+enum UserRole {
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id             String        @id @default(cuid())
+  name           String
+  email          String?       @unique
+  passwordHash   String
+  role           UserRole
+  studentNumber  String?       @unique // 学生 6 位编号，教师为 null
+  classId        String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  class          Class?                @relation(fields: [classId], references: [id])
+  submissions    StudentSubmission[]
+  practiceSheets PracticeSheet[]       @relation("StudentSheets")
+  progress       WeeklyProgress[]
+  examResults    ExamResult[]
+  kpAnalyses     StudentKpAnalysis[]
+
+  @@index([studentNumber])
+  @@index([email])
+}
+
+// ─── 班级 ───────────────────────────────────────────
+model Class {
+  id        String   @id @default(cuid())
+  name      String   // 如 "高一(3)班"
+  grade     String   // 如 "高一"
+  createdAt DateTime @default(now())
+
+  students  User[]
+  exams     Exam[]
+
+  @@index([grade])
+}
+
+// ─── 知识点目录 ──────────────────────────────────────
+model KnowledgePoint {
+  id       String  @id @default(cuid())
+  name     String  // 如 "光合作用"
+  book     String  // 如 "必修一"
+  module   String  // 如 "细胞的代谢"
+  parentId String? // 自引用：父知识点（如 "细胞的代谢" 下有 "酶" "ATP" "细胞呼吸" 等）
+  sortOrder Int    @default(0)
+
+  parent      KnowledgePoint?         @relation("KpHierarchy", fields: [parentId], references: [id])
+  children    KnowledgePoint[]        @relation("KpHierarchy")
+  questions   KnowledgePointOnQuestion[]
+  studentAnalyses StudentKpAnalysis[]
+
+  @@unique([book, module, name])
+  @@index([book])
+  @@index([module])
+}
+
+// ─── 题目 ───────────────────────────────────────────
+enum QuestionType {
+  CHOICE          // 选择题
+  FILL_IN_BLANK   // 填空题
+  SHORT_ANSWER    // 简答题
+  EXPERIMENT_DESIGN // 实验设计题
+  CHART_ANALYSIS  // 图表分析题
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Question {
+  id           String       @id @default(cuid())
+  content      String       // 题目文本（纯文本/HTML，无需 LaTeX）
+  answer       String       // 答案
+  explanation  String?      // 解析
+  questionType QuestionType
+  difficulty   Difficulty   @default(MEDIUM)
+  images       Json?        // 配图路径数组，如 ["/images/cell_structure.png"]（SQLite 用 Json 替代数组）
+  options      Json?        // 选择题选项 JSON: [{label:"A",text:"..."},...]
+  source       String?      // 题目来源：manual / ai / zhixue / import
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  knowledgePoints KnowledgePointOnQuestion[]
+  sheetItems      PracticeSheetItem[]
+  examResults     ExamQuestionResult[]
+
+  @@index([questionType])
+  @@index([difficulty])
+  @@index([source])
+}
+
+// 题目-知识点 多对多
+model KnowledgePointOnQuestion {
+  id               String         @id @default(cuid())
+  questionId       String
+  knowledgePointId String
+
+  question         Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, knowledgePointId])
+}
+
+// ─── 考试 ───────────────────────────────────────────
+model Exam {
+  id        String   @id @default(cuid())
+  name      String   // 如 "期中考试"
+  examDate  DateTime
+  classId   String
+  createdAt DateTime @default(now())
+
+  class     Class         @relation(fields: [classId], references: [id])
+  results   ExamResult[]
+
+  @@index([classId])
+  @@index([examDate])
+}
+
+// 学生单次考试总成绩
+model ExamResult {
+  id        String  @id @default(cuid())
+  examId    String
+  studentId String
+  totalScore Float? // 总分（有些学校可能不公布总分）
+  rank      Int?    // 排名
+
+  exam        Exam                  @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student     User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  questionResults ExamQuestionResult[]
+
+  @@unique([examId, studentId])
+  @@index([studentId])
+}
+
+// 每道题的得分
+model ExamQuestionResult {
+  id            String  @id @default(cuid())
+  examResultId  String
+  questionId    String
+  score         Float   // 该题得分
+  maxScore      Float   // 该题满分
+  isWrong       Boolean @default(false) // 是否算错题
+
+  examResult    ExamResult @relation(fields: [examResultId], references: [id], onDelete: Cascade)
+  question      Question   @relation(fields: [questionId], references: [id])
+
+  @@unique([examResultId, questionId])
+}
+
+// ─── 学生知识点分析（物化视图模式）────────────────
+model StudentKpAnalysis {
+  id               String   @id @default(cuid())
+  studentId        String
+  knowledgePointId String
+  scoreRate        Float    // 得分率 0.0-1.0
+  totalQuestions   Int      @default(0) // 涉及该知识点的题目总数
+  wrongCount       Int      @default(0) // 错题数
+  lastUpdated      DateTime @updatedAt
+
+  student          User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint @relation(fields: [knowledgePointId], references: [id])
+
+  @@unique([studentId, knowledgePointId])
+  @@index([scoreRate]) // 按得分率排序找薄弱点
+}
+
+// ─── 练习单 ─────────────────────────────────────────
+enum SheetStatus {
+  DRAFT
+  GENERATED
+  PRINTED
+  SUBMITTED
+  REVIEWED
+}
+
+model PracticeSheet {
+  id          String      @id @default(cuid())
+  studentId   String
+  weekLabel   String      // 如 "2026-W23"
+  status      SheetStatus @default(DRAFT)
+  pdfPath     String?     // PDF 文件路径
+  generatedAt DateTime?
+  createdAt   DateTime    @default(now())
+
+  student     User                @relation("StudentSheets", fields: [studentId], references: [id])
+  items       PracticeSheetItem[]
+  submissions StudentSubmission[]
+
+  @@unique([studentId, weekLabel])
+  @@index([studentId])
+  @@index([weekLabel])
+}
+
+// 练习单上的每道题
+model PracticeSheetItem {
+  id         String @id @default(cuid())
+  sheetId    String
+  questionId String
+  sortOrder  Int    @default(0) // 题目在练习单上的顺序
+  isReview   Boolean @default(false) // 是否间隔重复复习题
+
+  sheet    PracticeSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  question Question      @relation(fields: [questionId], references: [id])
+
+  @@index([sheetId])
+}
+
+// ─── 学生提交 ───────────────────────────────────────
+model StudentSubmission {
+  id             String    @id @default(cuid())
+  sheetId        String
+  studentId      String
+  wrongNumbers   Json?     // 错题编号列表（SQLite 用 Json 替代数组）
+  photoUrls      Json?     // 拍照上传的图片 URL 列表
+  ocrText        String?   // OCR 识别结果
+  submittedAt    DateTime  @default(now())
+
+  sheet          PracticeSheet @relation(fields: [sheetId], references: [id])
+  student        User          @relation(fields: [studentId], references: [id])
+
+  @@index([sheetId])
+  @@index([studentId])
+  @@index([submittedAt])
+}
+
+// ─── 间隔重复状态（SM-2）────────────────────────────
+model SpacedRepetitionState {
+  id             String   @id @default(cuid())
+  studentId      String
+  questionId     String
+  knowledgePointId String
+  interval       Int      @default(1)    // 当前间隔（天）
+  repetitions    Int      @default(0)    // 连续正确次数
+  easeFactor     Float    @default(2.5)  // SM-2 容易度因子
+  nextReviewDate DateTime              // 下次复习日期
+  lastReviewDate DateTime?             // 上次复习日期
+  lastScore      Int?                  // 上次评分 0-5
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([studentId, questionId])
+  @@index([studentId, nextReviewDate])
+  @@index([nextReviewDate])
+}
+
+// ─── 每周进步记录 ───────────────────────────────────
+model WeeklyProgress {
+  id             String   @id @default(cuid())
+  studentId      String
+  weekLabel      String   // 如 "2026-W23"
+  completionRate Float    @default(0) // 本周完成率 0-1
+  totalQuestions Int      @default(0) // 本周总题数
+  correctCount   Int      @default(0) // 正确数
+  streakWeeks    Int      @default(0) // 连续完成周数
+  createdAt      DateTime @default(now())
+
+  student        User     @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, weekLabel])
+  @@index([studentId])
+  @@index([weekLabel])
+}
