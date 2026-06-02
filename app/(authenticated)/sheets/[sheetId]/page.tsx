@@ -2,7 +2,7 @@ import { requireTeacher } from "@/lib/auth-utils"
 import { prisma } from "@/lib/prisma"
 import { markSheetPrinted } from "@/app/actions/practice-sheets"
 import Link from "next/link"
-import { ArrowLeft, Printer, Download } from "lucide-react"
+import { ArrowLeft, Printer, Download, XCircle, CheckCircle } from "lucide-react"
 
 interface Props {
   params: Promise<{ sheetId: string }>
@@ -51,6 +51,14 @@ export default async function SheetDetailPage({ params }: Props) {
   const reviewCount = sheet.items.filter((i) => i.isReview).length
   const newCount = sheet.items.length - reviewCount
 
+  // Compute wrong question numbers from latest submission
+  const latestSub = sheet.submissions[0]
+  const wrongNumbers: string[] = latestSub?.wrongNumbers
+    ? (latestSub.wrongNumbers as string[])
+    : []
+  const wrongSet = new Set(wrongNumbers.map(Number))
+  const hasSubmission = sheet.submissions.length > 0
+
   return (
     <div className="p-8 max-w-5xl">
       <Link
@@ -87,7 +95,7 @@ export default async function SheetDetailPage({ params }: Props) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-4 gap-4 mb-4">
         <StatBox label="题目总数" value={String(sheet.items.length)} />
         <StatBox label="新题" value={String(newCount)} color="text-emerald-600" />
         <StatBox label="复习题" value={String(reviewCount)} color="text-amber-600" />
@@ -106,6 +114,37 @@ export default async function SheetDetailPage({ params }: Props) {
         />
       </div>
 
+      {/* Submission stats */}
+      {hasSubmission && (
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-center">
+            <p className="text-lg font-bold text-emerald-600">
+              {sheet.items.length - wrongNumbers.length}
+            </p>
+            <p className="text-xs text-zinc-500">正确题数</p>
+          </div>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
+            <p className="text-lg font-bold text-red-500">
+              {wrongNumbers.length}
+            </p>
+            <p className="text-xs text-zinc-500">错题数</p>
+          </div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 text-center">
+            <p className="text-lg font-bold text-zinc-900">
+              {sheet.items.length > 0
+                ? Math.round(
+                    ((sheet.items.length - wrongNumbers.length) /
+                      sheet.items.length) *
+                      100
+                  )
+                : 0}
+              %
+            </p>
+            <p className="text-xs text-zinc-500">正确率</p>
+          </div>
+        </div>
+      )}
+
       {/* Questions */}
       <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
         <div className="px-5 py-4 border-b border-zinc-100">
@@ -120,6 +159,10 @@ export default async function SheetDetailPage({ params }: Props) {
                 key={item.id}
                 className={`px-5 py-4 hover:bg-zinc-50 ${
                   item.isReview ? "bg-amber-50/30" : ""
+                } ${
+                  hasSubmission && wrongSet.has(item.sortOrder)
+                    ? "bg-red-50/50"
+                    : ""
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -132,6 +175,13 @@ export default async function SheetDetailPage({ params }: Props) {
                   >
                     {item.sortOrder}
                   </div>
+                  {hasSubmission && (
+                    wrongSet.has(item.sortOrder) ? (
+                      <XCircle className="size-5 text-red-500 shrink-0 mt-0.5" />
+                    ) : (
+                      <CheckCircle className="size-5 text-emerald-500 shrink-0 mt-0.5" />
+                    )
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <TypeBadge type={q.questionType} />

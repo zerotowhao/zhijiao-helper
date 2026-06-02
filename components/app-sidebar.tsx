@@ -19,7 +19,7 @@ interface SidebarProps {
   user: any
 }
 
-const navItems = [
+const teacherNavItems = [
   {
     label: "首页仪表盘",
     href: "/",
@@ -52,8 +52,23 @@ const navItems = [
   },
 ]
 
+const studentNavItems = [
+  {
+    label: "首页",
+    href: "/",
+    icon: LayoutDashboard,
+  },
+  {
+    label: "我的练习单",
+    href: "/my-sheets",
+    icon: FileText,
+  },
+]
+
 export function AppSidebar({ user }: SidebarProps) {
   const pathname = usePathname()
+  const userRole = (user as any)?.role
+  const navItems = userRole === "STUDENT" ? studentNavItems : teacherNavItems
 
   if (!user) return null
 
