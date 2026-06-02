@@ -1,8 +1,8 @@
 import { requireTeacher } from "@/lib/auth-utils"
 import { prisma } from "@/lib/prisma"
-import { generateSheetPdf, markSheetPrinted } from "@/app/actions/practice-sheets"
+import { markSheetPrinted } from "@/app/actions/practice-sheets"
 import Link from "next/link"
-import { ArrowLeft, FileText, Printer, Download, RefreshCw } from "lucide-react"
+import { ArrowLeft, Printer, Download } from "lucide-react"
 
 interface Props {
   params: Promise<{ sheetId: string }>
@@ -285,28 +285,14 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   )
 }
 
-/**
- * Client component for PDF download
- */
 function PdfDownloadButton({ sheetId }: { sheetId: string }) {
   return (
-    <form action={handlePdfDownload.bind(null, sheetId)}>
-      <button
-        type="submit"
-        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
-      >
-        <Download className="size-4" />
-        下载 PDF
-      </button>
-    </form>
+    <a
+      href={`/api/sheets/${sheetId}/pdf`}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+    >
+      <Download className="size-4" />
+      下载 PDF
+    </a>
   )
-}
-
-async function handlePdfDownload(sheetId: string) {
-  "use server"
-  const result = await generateSheetPdf(sheetId)
-  if (result.success && result.pdfBase64) {
-    // Return as redirect to data URI
-    return { redirect: result.pdfBase64 }
-  }
 }
