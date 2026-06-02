@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zhijiao-helper
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/dev.db
+      # Set these in .env or pass directly:
+      - AUTH_SECRET=${AUTH_SECRET:-change-me-in-production}
+      - SEED_TEACHER_PASSWORD=${SEED_TEACHER_PASSWORD:-}
+      - SEED_STUDENT_PASSWORD=${SEED_STUDENT_PASSWORD:-}
+    volumes:
+      # Persist SQLite database
+      - sqlite_data:/app/data
+      # Mount .env for secrets (optional, prefer env_file)
+      - ./.env:/app/.env:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/classes"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  sqlite_data:
+    driver: local

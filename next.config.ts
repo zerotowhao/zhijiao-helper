@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",
+  // Allow server-only dependencies to not be bundled
+  serverExternalPackages: ["@libsql/client"],
 };
 
 export default nextConfig;

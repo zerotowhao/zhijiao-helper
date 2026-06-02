@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Build output
+.next
+out
+build
+dist
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database files (use volume mount)
+*.db
+*.db-journal
+
+# Tests
+coverage
+.nyc_output
+
+# Misc
+README.md
+LICENSE
+CLAUDE.md
+AGENTS.md
+.github
+.cursor
+*.md
